@@ -15,11 +15,44 @@ import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { PreviewNav } from './components/PreviewNav';
 
+// Helper to resolve route from pathname, search params, or hash
+function resolveLocationRoute(): string {
+  if (typeof window === 'undefined') return '/';
+
+  try {
+    // 1. Search parameters: ?path=..., ?page=..., ?route=..., ?admin=true
+    const searchParams = new URLSearchParams(window.location.search);
+    const param = searchParams.get('path') || searchParams.get('page') || searchParams.get('route');
+    if (param) {
+      return param.startsWith('/') ? param : `/${param}`;
+    }
+    if (searchParams.get('admin') === 'true' || searchParams.has('login') || searchParams.has('admin')) {
+      return '/admin/login';
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    // 2. Hash routing: #/admin/login, #admin/login, #admin, #login
+    const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
+    if (hash === 'admin/login' || hash === 'admin' || hash === 'login' || hash === 'masuk') {
+      return '/admin/login';
+    }
+    if (hash === 'admin/dashboard' || hash === 'dashboard') {
+      return '/admin/dashboard';
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback to pathname
+  return window.location.pathname || '/';
+}
+
 export default function App() {
   const [appData, setAppData] = useState<AppData>(initialData);
-  const [currentPath, setCurrentPath] = useState<string>(
-    typeof window !== 'undefined' ? window.location.pathname : '/'
-  );
+  const [currentPath, setCurrentPath] = useState<string>(resolveLocationRoute());
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -42,13 +75,17 @@ export default function App() {
 
     init();
 
-    // Listen to browser navigation (back/forward)
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
+    // Listen to browser navigation (back/forward, hash changes)
+    const handleNavigationChange = () => {
+      setCurrentPath(resolveLocationRoute());
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleNavigationChange);
+    window.addEventListener('hashchange', handleNavigationChange);
+    return () => {
+      window.removeEventListener('popstate', handleNavigationChange);
+      window.removeEventListener('hashchange', handleNavigationChange);
+    };
   }, []);
 
   // Update Dynamic Document Title & Meta (PRD Section 5.8)
@@ -99,22 +136,31 @@ export default function App() {
     );
   }
 
-  // Normalize path
+  // Normalize path and match flexible route aliases
   const cleanPath = currentPath.toLowerCase().replace(/\/$/, '') || '/';
+  const isLoginRoute = 
+    cleanPath === '/admin/login' || 
+    cleanPath === '/login' || 
+    cleanPath === '/admin' || 
+    cleanPath === '/masuk';
+
+  const isDashboardRoute = 
+    cleanPath === '/admin/dashboard' || 
+    cleanPath === '/dashboard';
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-900">
       
-      {/* Route: /admin/login */}
-      {cleanPath === '/admin/login' && (
+      {/* Route: Login Admin (/admin/login, /admin, /login, /masuk) */}
+      {isLoginRoute && (
         <AdminLogin
           onLoginSuccess={handleLoginSuccess}
           onNavigateHome={() => navigate('/')}
         />
       )}
 
-      {/* Route: /admin/dashboard (Protected) */}
-      {cleanPath === '/admin/dashboard' && (
+      {/* Route: Dashboard Admin (/admin/dashboard, /dashboard) - Protected */}
+      {isDashboardRoute && (
         isAdminLoggedIn ? (
           <AdminDashboard
             appData={appData}
@@ -131,7 +177,7 @@ export default function App() {
       )}
 
       {/* Route: / (Public Single-Page Portfolio) */}
-      {cleanPath !== '/admin/login' && cleanPath !== '/admin/dashboard' && (
+      {!isLoginRoute && !isDashboardRoute && (
         <div className="relative">
           {/* Public Navbar (Section scroll links, NO admin link) */}
           <Navbar profile={appData.profile} />
@@ -159,8 +205,12 @@ export default function App() {
             <ContactSection contacts={appData.contacts} profileName={appData.profile.nama} />
           </main>
 
-          {/* Public Minimalist Footer (NO admin link) */}
-          <Footer name={appData.profile.nama} tagline={appData.profile.tagline} />
+          {/* Public Minimalist Footer with subtle Admin entry */}
+          <Footer 
+            name={appData.profile.nama} 
+            tagline={appData.profile.tagline} 
+            onNavigateAdmin={() => navigate('/admin/login')}
+          />
         </div>
       )}
 

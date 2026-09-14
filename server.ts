@@ -70,11 +70,28 @@ app.get('/api/health', (req: Request, res: Response) => {
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
+    const fs = await import('fs');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Fallback handler in dev mode to guarantee all client routes return index.html
+    app.use('*', async (req: Request, res: Response, next) => {
+      // Don't intercept API routes
+      if (req.originalUrl.startsWith('/api')) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        let template = await fs.promises.readFile(indexPath, 'utf-8');
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));

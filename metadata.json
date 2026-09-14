@@ -1,0 +1,6 @@
+{
+  "name": "Portofolio Pribadi",
+  "description": "Website portofolio pribadi serba guna dengan CMS admin terproteksi sesuai PRD.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
